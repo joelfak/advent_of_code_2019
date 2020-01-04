@@ -453,9 +453,9 @@ class Test_HullPaintingRobot(unittest.TestCase):
         r.paintTurnMove(0,1)
         r.paintTurnMove(1,0)
         r.paintTurnMove(1,0)
+        # r.drawMapOfHull()
         self.assertEqual(r.pos, Point(0,-1))
         self.assertEqual(len(r.hullMap.keys()), 6)
-        r.drawMapOfHull()
 
 ## Main ########################################################
 
