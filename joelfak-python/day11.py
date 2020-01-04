@@ -7,6 +7,7 @@ from collections import namedtuple, deque
 
 IntcodeResult = namedtuple('IntcodeResult', ['programDone', 'output'])
 OpCode = namedtuple('OpCode', ['opcode','parameterModes'])
+Point = namedtuple('Point', ['x', 'y'])
 
 def parseOpcode(opcodeIn):
     parameterModes = deque()
@@ -39,7 +40,7 @@ class IntcodeComputer:
 
     def readMemory(self, position):
         if position >= len(self.program):
-            self.program.extend([0] * 100)
+            self.program.extend([0] * (position - len(self.program) + 100))
         if position > self.highestPosition:
             self.highestPosition = position
         return self.program[position]
@@ -175,11 +176,106 @@ class IntcodeComputer:
 
         return IntcodeResult(programDone, output)
 
+class HullPaintingRobot:
+    def __init__(self, intCodeProgram=[], position=None, direction=0):
+        if position is None:
+            self.pos = Point(0,0)
+        else:
+            self.pos = position
+
+        self.direction = direction # radians * 2/pi
+
+        self.minx = self.pos.x
+        self.maxx = self.pos.x
+        self.miny = self.pos.y
+        self.maxy = self.pos.y
+
+        self.hullMap = {}
+
+        self.ic = IntcodeComputer(intCodeProgram)
+
+    def getColor(self, position):
+        return self.hullMap.get(position, 0)
+
+    def paintPanel(self, position, color):
+        self.hullMap[position] = color
+
+    def drawMapOfHull(self):
+        miny = min(self.hullMap, key=lambda p: p.y)
+        maxy = max(self.hullMap, key=lambda p: p.y)
+        minx = min(self.hullMap, key=lambda p: p.x)
+        maxx = max(self.hullMap, key=lambda p: p.x)
+        blackChar = '\u2B1B'
+        whiteChar = '\u2B1C'
+        print('\n'+blackChar * (maxx.x - minx.x + 3))
+        for y in range(miny.y, maxy.y+1):
+            print(blackChar, end = '')
+            for x in range(minx.x, maxx.x+1):
+                pos = self.hullMap.get(Point(x,y))
+                if pos is None:
+                    print(blackChar, end = '')
+                elif pos == 0:
+                    print(blackChar, end = '')
+                else:
+                    print(whiteChar, end = '')
+            print(blackChar)
+        print(blackChar * (maxx.x - minx.x + 3))
+
+    def turnLeft(self):
+        self.direction = (self.direction + 1) % 4
+        return self
+
+    def turnRight(self):
+        self.direction = (self.direction - 1) % 4
+        return self
+
+    def move(self):
+        if self.direction == 0:
+            self.pos = Point(self.pos.x, self.pos.y-1)
+        if self.direction == 1:
+            self.pos = Point(self.pos.x-1, self.pos.y)
+        if self.direction == 2:
+            self.pos = Point(self.pos.x, self.pos.y+1)
+        if self.direction == 3:
+            self.pos = Point(self.pos.x+1, self.pos.y)
+        return self
+
+    def paintTurnMove(self, color, direction):
+        self.paintPanel(self.pos, color)
+
+        if direction == 0:
+            self.turnLeft()
+        elif direction == 1:
+            self.turnRight()
+        else:
+            raise Exception('Invalid turn command', direction)
+
+        self.move()
+
+        return self
+
+    def paintHull(self):
+        while True:
+            res = self.ic.runUntilHalt([self.getColor(self.pos)])
+            # print(res)
+            colorToPaint = res.output[0]
+            directionToTurn = res.output[1]
+            self.paintTurnMove(colorToPaint, directionToTurn)
+            if res.programDone:
+                break
+
 def part1(program):
-    return IntcodeComputer(program).runUntilHalt([1]).output
+    r = HullPaintingRobot(program)
+    r.paintHull()
+    r.drawMapOfHull()
+    return len(r.hullMap.keys())
 
 def part2(program):
-    return IntcodeComputer(program).runUntilHalt([2]).output
+    r = HullPaintingRobot(program)
+    r.hullMap[Point(0,0)] = 1
+    r.paintHull()
+    r.drawMapOfHull()
+    return len(r.hullMap.keys())
 
 ## Unit tests ########################################################
 
@@ -280,7 +376,6 @@ class TestDay09_part1(unittest.TestCase):
     def test_output_16_digit_number(self):
         ic = IntcodeComputer([1102,34915192,34915192,7,4,7,99,0])
         res = ic.runUntilHalt()
-        # print("output: {}".format(res.output))
         numDigits = int(math.log10(res.output[0]))+1
         self.assertEqual(numDigits, 16)
 
@@ -289,10 +384,83 @@ class TestDay09_part1(unittest.TestCase):
         res = ic.runUntilHalt()
         self.assertEqual(res.output[0], 1125899906842624)
 
+class Test_HullPaintingRobot(unittest.TestCase):
+    def test_turnLeft(self):
+        self.assertEqual(HullPaintingRobot(direction=0).turnLeft().direction, 1)
+
+    def test_turnLeft_wrap(self):
+        self.assertEqual(HullPaintingRobot(direction=3).turnLeft().direction, 0)
+
+    def test_turnRight(self):
+        self.assertEqual(HullPaintingRobot(direction=2).turnRight().direction, 1)
+
+    def test_turnRight_wrap(self):
+        self.assertEqual(HullPaintingRobot(direction=0).turnRight().direction, 3)
+
+    def test_move_up(self):
+        self.assertEqual(   HullPaintingRobot(position=Point(0,0), direction=0).move().pos,
+                            Point(0,-1))
+
+    def test_move_left(self):
+        self.assertEqual(   HullPaintingRobot(position=Point(0,0), direction=1).move().pos,
+                            Point(-1,0))
+
+    def test_move_down(self):
+        self.assertEqual(   HullPaintingRobot(position=Point(0,0), direction=2).move().pos,
+                            Point(0,1))
+
+    def test_move_right(self):
+        self.assertEqual(   HullPaintingRobot(position=Point(0,0), direction=3).move().pos,
+                            Point(1,0))
+
+    def test_paintTurnMove_turnLeft(self):
+        self.assertEqual(   HullPaintingRobot(position=Point(0,0), direction=0).paintTurnMove(0,0).pos,
+                            Point(-1,0))
+
+    def test_paintTurnMove_turnRight(self):
+        self.assertEqual(   HullPaintingRobot(position=Point(0,2), direction=1).paintTurnMove(0,1).pos,
+                            Point(0,1))
+
+    def test_getColor_default(self):
+        self.assertEqual( HullPaintingRobot().getColor(Point(1,2)), 0)
+
+    def test_getColor_paintedBlack(self):
+        r = HullPaintingRobot()
+        r.hullMap[Point(2,3)] = 0
+        self.assertEqual( r.getColor(Point(2,3)), 0)
+
+    def test_getColor_paintedWhite(self):
+        r = HullPaintingRobot()
+        r.hullMap[Point(3,4)] = 1
+        self.assertEqual( r.getColor(Point(3,4)), 1)
+
+    def test_paintTurnMove_paintBlack(self):
+        r = HullPaintingRobot(position=Point(0,0), direction=0)
+        r.paintTurnMove(0,0)
+        self.assertEqual(r.getColor(Point(0,0)), 0)
+
+    def test_paintTurnMove_paintWhite(self):
+        r = HullPaintingRobot(position=Point(0,0), direction=0)
+        r.paintTurnMove(1,0)
+        self.assertEqual(r.getColor(Point(0,0)), 1)
+
+    def test_paintExample(self):
+        r = HullPaintingRobot(position=Point(0,0), direction=0)
+        r.paintTurnMove(1,0)
+        r.paintTurnMove(0,0)
+        r.paintTurnMove(1,0)
+        r.paintTurnMove(1,0)
+        r.paintTurnMove(0,1)
+        r.paintTurnMove(1,0)
+        r.paintTurnMove(1,0)
+        # r.drawMapOfHull()
+        self.assertEqual(r.pos, Point(0,-1))
+        self.assertEqual(len(r.hullMap.keys()), 6)
+
 ## Main ########################################################
 
 if __name__ == '__main__':
 
-    print("Advent of code day 9")
+    print("Advent of code day 11")
     print("Part1 result: {}".format(part1(getCommaSeparatedIntsFromFile(sys.argv[1]))))
     print("Part2 result: {}".format(part2(getCommaSeparatedIntsFromFile(sys.argv[1]))))
