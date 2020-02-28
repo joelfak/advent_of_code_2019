@@ -18,8 +18,8 @@ class Vector3d:
     def fromList(cls, list):
         return cls(list[0], list[1], list[2])
 
-    def toList(self):
-        return [self.x, self.y, self.z]
+    def toTuple(self):
+        return (self.x, self.y, self.z)
 
     def __add__(self, other):
         return Vector3d(self.x + other.x, self.y + other.y, self.z + other.z)
@@ -37,7 +37,7 @@ class Vector3d:
         return math.sqrt(self.x**2 + self.y**2 + self.z**2)
 
     def getUnitVector(self):
-        l = list(map(lambda v: 1 if v>0 else (-1 if v<0 else 0), self.toList()))
+        l = list(map(lambda v: 1 if v>0 else (-1 if v<0 else 0), self.toTuple()))
         return Vector3d.fromList(l)
 
     def __repr__(self):
@@ -64,11 +64,14 @@ class Moon:
     def getPositionAndVelocity(self):
         return (self.position, self.velocity)
 
+    def getState(self):
+        return (self.position.toTuple(), self.velocity.toTuple())
+
     def getPotentialEnergy(self):
-        return sum((map(abs, self.position.toList())))
+        return sum((map(abs, self.position.toTuple())))
 
     def getKineticEnergy(self):
-        return sum((map(abs, self.velocity.toList())))
+        return sum((map(abs, self.velocity.toTuple())))
 
     def getTotalEnergy(self):
         return self.getPotentialEnergy() * self.getKineticEnergy()
@@ -76,20 +79,62 @@ class Moon:
     def getEnergyVector(self):
         return [self.getPotentialEnergy(), self.getKineticEnergy(), self.getTotalEnergy()]
 
+from pprint import pprint
+
 class MoonSystem:
     def __init__(self, moons=[]):
         self.moons = moons
+        self.simulationCycles = 0
+        self.visitedStates = set()
+        self.saveState()
+        self.x = [moon.position.x for moon in self.moons]
+        self.y = [moon.position.y for moon in self.moons]
+        self.z = [moon.position.z for moon in self.moons]
+        self.vel_x = [moon.velocity.x for moon in self.moons]
+        self.vel_y = [moon.velocity.y for moon in self.moons]
+        self.vel_z = [moon.velocity.z for moon in self.moons]
+
+    def simulateOneStep(self):
+        for moon in self.moons:
+            moon.applyGravityOfMoons(self.moons)
+        for moon in self.moons:
+            moon.applyVelocity()
 
     def simulate(self, steps=1):
         for step in range(steps):
-            for moon in self.moons:
-                moon.applyGravityOfMoons(self.moons)
-            for moon in self.moons:
-                moon.applyVelocity()
+            self.simulateOneStep()
+            self.saveState()
         return self
 
     def getTotalSystemEnergy(self):
         return sum(moon.getTotalEnergy() for moon in self.moons)
+
+    def getCurrentState(self):
+        return tuple([moon.getState() for moon in self.moons])
+
+    def saveState(self):
+        self.visitedStates.add(self.getCurrentState())
+
+    def printVisitedStates(self):
+        pprint(self.visitedStates)
+
+    def simulateUntilPreviousState_old(self, verbose=0):
+        while True:
+            self.simulateOneStep()
+            self.simulationCycles += 1
+            if verbose > 0 and self.simulationCycles % verbose == 0:
+                print("Cycles: {}".format(self.simulationCycles))
+            if self.getCurrentState() in self.visitedStates:
+                break
+            self.saveState()
+
+    def simulateUntilPreviousState(self, verbose=0):
+        self.velocity += (otherMoon.position - self.position).getUnitVector()
+
+        return
+
+    def getSimulationCycles(self):
+        return self.simulationCycles
 
 def part1():
     ms = MoonSystem([Moon((16, -11, 2)), Moon((0, -4, 7)), Moon((6, 4, -10)), Moon((-3, -2, -4))])
@@ -105,8 +150,8 @@ class TestVector3d(unittest.TestCase):
     def test_fromList(self):
         self.assertEqual(Vector3d.fromList([2,3,4]), Vector3d(2,3,4))
 
-    def test_toList(self):
-        self.assertEqual(Vector3d(2,3,4).toList(), [2,3,4])
+    def test_toTuple(self):
+        self.assertEqual(Vector3d(2,3,4).toTuple(), (2,3,4))
 
     def test_add(self):
         self.assertEqual(Vector3d(1,2,-3) + Vector3d(3,-1,5), Vector3d(4,1,2))
@@ -266,6 +311,27 @@ class TestMoonSystem(unittest.TestCase):
         self.assertEqual(moons[2].getEnergyVector(), [41,14,574])
         self.assertEqual(moons[3].getEnergyVector(), [52,9,468])
         self.assertEqual(moonSystem.getTotalSystemEnergy(), 1940)
+
+class TestMoonSystem_part2(unittest.TestCase):
+    def test_sampleSystem1(self):
+        moons = [Moon((-1, 0, 2)), Moon((2, -10, -7)), Moon((4, -8, 8)), Moon((3, 5, -1))]
+        ms = MoonSystem(moons)
+        ms.simulateUntilPreviousState(100)
+        self.assertEqual(ms.getSimulationCycles(), 2772)
+        self.assertEqual(moons[0].getPositionAndVelocity(), (Vector3d(-1,  0, 2), Vector3d( 0, 0, 0)))
+        self.assertEqual(moons[1].getPositionAndVelocity(), (Vector3d( 2,-10,-7), Vector3d( 0, 0, 0)))
+        self.assertEqual(moons[2].getPositionAndVelocity(), (Vector3d( 4, -8, 8), Vector3d( 0, 0, 0)))
+        self.assertEqual(moons[3].getPositionAndVelocity(), (Vector3d( 3,  5,-1), Vector3d( 0, 0, 0)))
+
+    # def test_sampleSystem2(self):
+    #     moons = [Moon((-8, -10, 0)), Moon((5, 5, 10)), Moon((2, -7, 3)), Moon((9, -8, -3))]
+    #     ms = MoonSystem(moons)
+    #     ms.simulateUntilPreviousState(10000)
+    #     self.assertEqual(ms.getSimulationCycles(), 4686774924)
+    #     self.assertEqual(moons[0].getPositionAndVelocity(), (Vector3d(-8, -10,  0), Vector3d( 0, 0, 0)))
+    #     self.assertEqual(moons[1].getPositionAndVelocity(), (Vector3d( 5,   5, 10), Vector3d( 0, 0, 0)))
+    #     self.assertEqual(moons[2].getPositionAndVelocity(), (Vector3d( 2,  -7,  3), Vector3d( 0, 0, 0)))
+    #     self.assertEqual(moons[3].getPositionAndVelocity(), (Vector3d( 9,  -8, -3), Vector3d( 0, 0, 0)))
 
 ## Main ########################################################
 
